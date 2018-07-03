@@ -1,0 +1,110 @@
+<?xml version="1.0"?>
+<implementation>
+  <functions>
+  local SID_CMDSWITCH = "urn:magnus-nu:serviceId:CmdSwitch1"
+
+  local LOG_PREFIX = "CMDSWITCH: "
+
+  -- Performs the command execution and sets status variables
+  function cmdswitch(devId, target)
+    local switchValue = "On";
+    local status = "1";
+    if (target == "0") then
+      switchValue = "Off"
+      status = "0"
+    end
+
+    local cmdStr=luup.variable_get(SID_CMDSWITCH, switchValue .. "Cmd", lul_device)
+    os.execute(cmdStr .. " " .. status)
+
+    luup.variable_set("urn:upnp-org:serviceId:SwitchPower1", "Status", status, devId)
+    luup.variable_set("urn:upnp-org:serviceId:Dimming1", "LoadLevelStatus", tostring(target), devId)
+    luup.log(LOG_PREFIX .. "Switching " .. devId .. " " .. switchValue)
+    return true
+  end
+
+  -- Init variables if not set, make them visible in UI
+  function startup(lul_device)
+    local lul_switchvariablevalue = luup.variable_get("urn:upnp-org:serviceId:SwitchPower1", "Status", lul_device)
+    if (lul_switchvariablevalue == nil) then
+      lul_switchvariablevalue = "0"
+      luup.variable_set("urn:upnp-org:serviceId:SwitchPower1", "Status", lul_switchvariablevalue, lul_device)
+    end
+
+    lul_switchvariablevalue = luup.variable_get(SID_CMDSWITCH, "OnCmd", lul_device)
+    if (lul_switchvariablevalue == nil) then
+      lul_switchvariablevalue = "/usr/bin/cmd_on.sh"
+      luup.variable_set(SID_CMDSWITCH, "OnCmd", lul_switchvariablevalue, lul_device)
+    end
+
+    lul_switchvariablevalue = luup.variable_get(SID_CMDSWITCH, "OffCmd", lul_device)
+    if (lul_switchvariablevalue == nil) then
+      lul_switchvariablevalue = "/usr/bin/cmd_off.sh"
+      luup.variable_set(SID_CMDSWITCH, "OffCmd", lul_switchvariablevalue, lul_device)
+    end
+
+    luup.log(LOG_PREFIX .. "Init device:" .. tostring(lul_device))
+  end
+
+  function incoming(data)
+     luup.log(LOG_PREFIX .. "Incoming: " .. data)
+  end
+  </functions>
+  <startup>startup</startup>
+  <incoming>
+    <lua>
+        incoming(tostring(lul_data))
+    </lua>
+  </incoming>
+  <actionList>
+    <action>
+      <serviceId>urn:upnp-org:serviceId:SwitchPower1</serviceId>
+      <name>SetTarget</name>
+      <run>
+        return cmdswitch(lul_device, lul_settings.newTargetValue)
+      </run>
+    </action>
+
+    <action>
+      <serviceId>urn:upnp-org:serviceId:Dimming1</serviceId>
+      <name>SetLoadLevelTarget</name>
+      <run>
+        return cmdswitch(lul_device, lul_settings.newLoadlevelTarget)
+      </run>
+    </action>
+
+    <action>
+      <serviceId>urn:upnp-org:serviceId:WindowCovering1</serviceId>
+      <name>Up</name>
+      <run>
+        return cmdswitch(lul_device, "100")
+      </run>
+    </action>
+    <action>
+      <serviceId>urn:upnp-org:serviceId:WindowCovering1</serviceId>
+      <name>Down</name>
+      <run>
+        return cmdswitch(lul_device, "0")
+      </run>
+    </action>
+    <action>
+      <serviceId>urn:upnp-org:serviceId:WindowCovering1</serviceId>
+      <name>Stop</name>
+      <run>
+        luup.log(LOG_PREFIX .. "Stop command called, not implemented")
+      </run>
+    </action>
+
+    <action>
+      <serviceId>urn:micasaverde-com:serviceId:HaDevice1</serviceId>
+      <name>ToggleState</name>
+      <run>
+        -- Support for the toggble of status, handy for a toggle scene
+        local lul_switchstatusvalue = luup.variable_get("urn:upnp-org:serviceId:SwitchPower1", "Status", lul_device)
+        local newSwitchValue = "0"
+        if (lul_switchstatusvalue == "0") then newSwitchValue = "100" end
+        return cmdswitch(lul_device, newSwitchValue)
+      </run>
+    </action>
+  </actionList>
+</implementation>
